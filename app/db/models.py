@@ -78,6 +78,7 @@ class TraceRecord(Base):
         DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.UTC), nullable=False
     )
 
+
 class AiHealthState(str, enum.Enum):
     HEALTHY = "HEALTHY"
     RATE_LIMITED = "RATE_LIMITED"
@@ -86,6 +87,7 @@ class AiHealthState(str, enum.Enum):
     TIMEOUT = "TIMEOUT"
     PROVIDER_ERROR = "PROVIDER_ERROR"
     DEGRADED = "DEGRADED"
+
 
 class AiHealthEvent(Base):
     __tablename__ = "ai_health_events"
@@ -99,7 +101,7 @@ class AiHealthEvent(Base):
     message_id: Mapped[str] = mapped_column(String(100), nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     recovered: Mapped[bool] = mapped_column(default=False, nullable=False)
-    
+
     occurred_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.datetime.now(datetime.UTC), nullable=False
     )

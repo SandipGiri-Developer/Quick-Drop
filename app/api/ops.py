@@ -167,9 +167,10 @@ def reject_ops_item(item_id: int, db: Session = Depends(get_db)) -> dict[str, st
         logger.error(f"Rejection failed for item {item_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to reject item")
 
+
 @router.get("/ops/ai-health")
 def get_ai_health(db: Session = Depends(get_db)) -> dict[str, Any]:  # noqa: B008
     from app.services.ai_health import AiHealthTracker
+
     tracker = AiHealthTracker.get_instance()
     return tracker.get_health_status(db)
-

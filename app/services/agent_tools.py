@@ -132,9 +132,16 @@ def get_agent_tools(db: Session, rider_id: str) -> list[Any]:
             elif decision.outcome in ("APPROVAL_REQUIRED", "ESCALATE"):
                 from app.db.models import OpsItem
 
-                existing_ops = db.query(OpsItem).filter_by(
-                    rider_id=rider_id, kind=decision.outcome, amount=owed_amount, trip_id=trip_id
-                ).first()
+                existing_ops = (
+                    db.query(OpsItem)
+                    .filter_by(
+                        rider_id=rider_id,
+                        kind=decision.outcome,
+                        amount=owed_amount,
+                        trip_id=trip_id,
+                    )
+                    .first()
+                )
                 if not existing_ops:
                     ops_item = OpsItem(
                         rider_id=rider_id,

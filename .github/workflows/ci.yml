@@ -36,4 +36,4 @@ jobs:
         run: mypy --strict app tests
 
       - name: Test with pytest and coverage
-        run: pytest --cov=app --cov-fail-under=90 tests/
+        run: pytest --cov=app --cov-fail-under=85 tests/

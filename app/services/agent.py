@@ -53,13 +53,13 @@ def create_agent_graph(rider_id: str, db: Session) -> Any:
         llm = ChatGroq(
             model=settings.llm_model or "llama3-8b-8192",
             temperature=0.0,
-            max_retries=0, # We handle retries manually
+            max_retries=0,  # We handle retries manually
         )
     else:
         llm = ChatGoogleGenerativeAI(
             model=settings.llm_model or "gemini-3.8-flash",
             temperature=0.0,
-            max_retries=0, # We handle retries manually
+            max_retries=0,  # We handle retries manually
         )
 
     llm_with_tools = llm.bind_tools(tools)
@@ -68,9 +68,9 @@ def create_agent_graph(rider_id: str, db: Session) -> Any:
         messages = state["messages"]
         if not messages or not isinstance(messages[0], SystemMessage):
             messages = [SystemMessage(content=get_system_prompt(state["rider_id"]))] + messages
-        
+
         tracker = AiHealthTracker.get_instance()
-        
+
         # Bounded retry loop for 429s/timeouts
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -80,17 +80,19 @@ def create_agent_graph(rider_id: str, db: Session) -> Any:
                 if tracker.state == AiHealthState.AUTHENTICATION_ERROR and attempt == 0:
                     # Let it try once to see if it recovered, but if it fails again we won't loop
                     pass
-                
+
                 response = llm_with_tools.invoke(messages)
                 # Success
-                tracker.record_event(db, settings.llm_provider, "SUCCESS", "Request successful", 200, True)
+                tracker.record_event(
+                    db, settings.llm_provider, "SUCCESS", "Request successful", 200, True
+                )
                 return {"messages": [response]}
-                
+
             except Exception as e:  # noqa: BLE001
                 err_str = str(e).lower()
                 status = 500
                 err_type = "UNKNOWN"
-                
+
                 if "429" in err_str or "rate limit" in err_str or "too many" in err_str:
                     status = 429
                     err_type = "RATE_LIMIT"
@@ -103,19 +105,19 @@ def create_agent_graph(rider_id: str, db: Session) -> Any:
                 elif "timeout" in err_str or "deadline" in err_str:
                     status = 504
                     err_type = "TIMEOUT"
-                    
+
                 tracker.record_event(db, settings.llm_provider, err_type, str(e), status, False)
-                
+
                 if status in (401, 403, 402):
                     # Do NOT retry auth/quota failures
                     break
-                    
+
                 if attempt < max_retries:
                     # Backoff
-                    time.sleep(2 ** attempt)
+                    time.sleep(2**attempt)
                 else:
                     break
-        
+
         # If we fall through, it means all retries failed
         fallback_msg = "I am currently experiencing technical difficulties processing your request. Please try again later."
         return {"messages": [AIMessage(content=fallback_msg)]}

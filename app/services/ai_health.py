@@ -13,26 +13,26 @@ class AiHealthTracker:
     _instance = None
     _lock = threading.Lock()
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.state = AiHealthState.HEALTHY
-        self.last_error = None
-        self.last_error_time = None
+        self.last_error: str | None = None
+        self.last_error_time: datetime.datetime | None = None
         self.last_request_time = 0.0
 
     @classmethod
-    def get_instance(cls):
+    def get_instance(cls) -> "AiHealthTracker":
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = cls()
         return cls._instance
 
-    def _wait_for_rate_limit(self):
+    def _wait_for_rate_limit(self) -> None:
         """Ensure 3-4 seconds between requests."""
         if os.getenv("TESTING") == "1":
-            return # Don't delay in fast tests
-            
-        MIN_INTERVAL = 3.5  
+            return  # Don't delay in fast tests
+
+        MIN_INTERVAL = 3.5
         with self._lock:
             now = time.time()
             elapsed = now - self.last_request_time
@@ -40,7 +40,15 @@ class AiHealthTracker:
                 time.sleep(MIN_INTERVAL - elapsed)
             self.last_request_time = time.time()
 
-    def record_event(self, db: Session, provider: str, error_type: str, safe_message: str, status_code: int | None = None, is_success: bool = False):
+    def record_event(
+        self,
+        db: Session,
+        provider: str,
+        error_type: str,
+        safe_message: str,
+        status_code: int | None = None,
+        is_success: bool = False,
+    ) -> None:
         with self._lock:
             if is_success:
                 if self.state != AiHealthState.HEALTHY:
@@ -50,7 +58,7 @@ class AiHealthTracker:
                     error_type="SUCCESS",
                     status_code=200,
                     safe_message="Recovered to HEALTHY",
-                    recovered=True
+                    recovered=True,
                 )
                 db.add(event)
                 try:
@@ -61,9 +69,17 @@ class AiHealthTracker:
 
             if status_code == 429:
                 self.state = AiHealthState.RATE_LIMITED
-            elif status_code in (401, 403) or "auth" in safe_message.lower() or "key" in safe_message.lower():
+            elif (
+                status_code in (401, 403)
+                or "auth" in safe_message.lower()
+                or "key" in safe_message.lower()
+            ):
                 self.state = AiHealthState.AUTHENTICATION_ERROR
-            elif status_code == 402 or "quota" in safe_message.lower() or "exhausted" in safe_message.lower():
+            elif (
+                status_code == 402
+                or "quota" in safe_message.lower()
+                or "exhausted" in safe_message.lower()
+            ):
                 self.state = AiHealthState.QUOTA_EXHAUSTED
             elif error_type == "TIMEOUT":
                 self.state = AiHealthState.TIMEOUT
@@ -84,7 +100,7 @@ class AiHealthTracker:
                 error_type=error_type,
                 status_code=status_code,
                 safe_message=safe_msg[:1000],
-                recovered=False
+                recovered=False,
             )
             db.add(event)
             try:
@@ -94,13 +110,15 @@ class AiHealthTracker:
 
     def get_health_status(self, db: Session) -> dict[str, Any]:
         with self._lock:
-            events = db.query(AiHealthEvent).order_by(AiHealthEvent.occurred_at.desc()).limit(15).all()
+            events = (
+                db.query(AiHealthEvent).order_by(AiHealthEvent.occurred_at.desc()).limit(15).all()
+            )
             recent_events = [
                 {
                     "time": e.occurred_at.strftime("%H:%M:%S"),
                     "type": e.error_type,
                     "status": e.status_code,
-                    "message": e.safe_message
+                    "message": e.safe_message,
                 }
                 for e in events
             ]
@@ -108,6 +126,8 @@ class AiHealthTracker:
                 "provider": os.getenv("LLM_PROVIDER", "google"),
                 "status": self.state.value,
                 "last_error": self.last_error,
-                "last_error_time": self.last_error_time.strftime("%Y-%m-%d %H:%M:%S") if self.last_error_time else None,
-                "recent_events": recent_events
+                "last_error_time": self.last_error_time.strftime("%Y-%m-%d %H:%M:%S")
+                if self.last_error_time
+                else None,
+                "recent_events": recent_events,
             }
