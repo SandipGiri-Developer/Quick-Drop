@@ -39,8 +39,21 @@ def get_agent_tools(db: Session, rider_id: str) -> list[Any]:
 
             as_of = parse_utc("2026-09-23T06:30:00Z")
             discrepancies = engine.find_discrepancies(rider_id, as_of=as_of, trip_id=trip_id)
+            
+            all_discrepancies = engine.find_discrepancies(rider_id, as_of=as_of)
+            total_csv = sum(d.claimable for d in all_discrepancies if d.claimable > 0)
+            
+            try:
+                ledger = payswift.get_ledger(rider_id)
+                total_paid = sum(p.amount for p in ledger.data if p.status.lower() == "processed")
+            except Exception as e:
+                logger.warning(f"Could not fetch ledger for check_discrepancies: {e}")
+                total_paid = 0
+                
+            true_outstanding = max(0, total_csv - total_paid)
+
             if not discrepancies:
-                return "No discrepancies found. The rider has been paid correctly according to the ledger."
+                return f"No discrepancies found for this request. True Outstanding Balance: ₹{true_outstanding}"
 
             lines = []
             for d in discrepancies:
@@ -48,19 +61,23 @@ def get_agent_tools(db: Session, rider_id: str) -> list[Any]:
                     f"- Date: {d.day}, Trip: {d.trip_id or 'N/A'}, Issue: {d.kind.value}, "
                     f"Owed: ₹{d.owed}, Paid: ₹{d.paid}, Claimable: ₹{d.claimable}"
                 )
+            lines.append(f"\n---")
+            lines.append(f"Total CSV Discrepancies: ₹{total_csv}")
+            lines.append(f"Already Compensated via PaySwift: ₹{total_paid}")
+            lines.append(f"True Outstanding Balance: ₹{true_outstanding}")
             return "Found the following discrepancies:\n" + "\n".join(lines)
         except Exception as e:  # noqa: BLE001
             logger.error(f"Error checking discrepancies: {e}")
             return f"Error checking discrepancies: {e!s}"
 
     @tool
-    def execute_dispute_resolution(trip_id: str) -> str:
+    def execute_dispute_resolution(trip_id: str | None = None) -> str:
         """
         Executes the resolution for a verified dispute.
         MUST only be called AFTER checking discrepancies.
         This tool processes discrepancies for the rider.
         Args:
-            trip_id: The specific trip ID to resolve. REQUIRED.
+            trip_id: The specific trip ID to resolve. Optional for incentives or daily discrepancies without a specific trip.
         Returns:
             The outcome of the decision engine and execution status.
         """
@@ -70,31 +87,35 @@ def get_agent_tools(db: Session, rider_id: str) -> list[Any]:
 
             as_of = parse_utc("2026-09-23T06:30:00Z")
             discrepancies = engine.find_discrepancies(rider_id, as_of=as_of, trip_id=trip_id)
-            owed_amount = sum(d.claimable for d in discrepancies if d.claimable > 0)
-
-            if owed_amount <= 0:
-                return "Decision: DENY. No claimable amount is owed for this dispute."
-
-            # 1a. CRITICAL: Compute the TOTAL outstanding balance across ALL trips for this rider.
-            # The ₹200 auto-pay limit applies to the rider's ENTIRE outstanding balance, not per-trip.
-            # If total > ₹200, no individual trip may be auto-paid — the whole batch goes to ops.
+            
             all_discrepancies = engine.find_discrepancies(rider_id, as_of=as_of)
-            total_rider_owed = sum(d.claimable for d in all_discrepancies if d.claimable > 0)
+            total_rider_owed_csv = sum(d.claimable for d in all_discrepancies if d.claimable > 0)
 
-            # 2. Check how many automatic payments were made today by querying the ledger.
             import datetime
 
             today_str = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d")
             auto_payments_today = 0
+            total_paid_in_payswift = 0
             try:
                 ledger = payswift.get_ledger(rider_id)
-                auto_payments_today = sum(
-                    1
-                    for p in ledger.data
-                    if p.status.lower() == "processed" and p.created_at.startswith(today_str)
-                )
+                for p in ledger.data:
+                    if p.status.lower() == "processed":
+                        total_paid_in_payswift += p.amount
+                        if p.created_at.startswith(today_str) and p.reference.startswith("dispute_"):
+                            auto_payments_today += 1
             except Exception as e:  # noqa: BLE001
-                logger.warning(f"Could not fetch ledger to check auto_payments_today: {e}")
+                logger.warning(f"Could not fetch ledger: {e}")
+
+            true_outstanding_balance = max(0, total_rider_owed_csv - total_paid_in_payswift)
+
+            if true_outstanding_balance <= 0:
+                return "Decision: DENY. No true outstanding balance remains (rider already compensated via PaySwift)."
+
+            csv_trip_owed = sum(d.claimable for d in discrepancies if d.claimable > 0)
+            if csv_trip_owed <= 0:
+                return "Decision: DENY. No claimable amount is owed for this specific request."
+
+            owed_amount = min(csv_trip_owed, true_outstanding_balance)
 
             payment_ref = f"dispute_{rider_id}_{trip_id}"
             try:
@@ -106,11 +127,11 @@ def get_agent_tools(db: Session, rider_id: str) -> list[Any]:
             except Exception as e:  # noqa: BLE001
                 logger.debug(f"Could not check existing payment: {e}")
 
-            # Use total_rider_owed for the threshold decision so the ₹200 limit is
-            # evaluated against the full outstanding balance, not just this trip.
+            # Use true_outstanding_balance for the threshold decision so the ₹200 limit is
+            # evaluated against the full true outstanding balance, not just this trip.
             context = DecisionContext(
                 authenticated_rider_id=rider_id,
-                owed_amount=total_rider_owed,
+                owed_amount=true_outstanding_balance,
                 auto_payments_today=auto_payments_today,
                 is_within_window=any(d.within_window for d in discrepancies if d.claimable > 0),
             )
@@ -118,7 +139,7 @@ def get_agent_tools(db: Session, rider_id: str) -> list[Any]:
 
             # 4. Act on the decision
             if decision.outcome == "PAY":
-                # Pay only the specific trip's claimable amount (total was used for threshold only)
+                # Pay only the specific trip's claimable amount (capped by true_outstanding_balance)
                 try:
                     from app.infrastructure.payswift.models import PaySwiftRequest
 
@@ -130,15 +151,13 @@ def get_agent_tools(db: Session, rider_id: str) -> list[Any]:
                 except Exception as e:  # noqa: BLE001
                     return f"Decision: PAY, but execution failed via PaySwift: {e}"
             elif decision.outcome in ("APPROVAL_REQUIRED", "ESCALATE"):
-                from app.db.models import OpsItem
+                from app.db.models import OpsItem, OpsItemStatus
 
                 existing_ops = (
                     db.query(OpsItem)
                     .filter_by(
                         rider_id=rider_id,
-                        kind=decision.outcome,
-                        amount=owed_amount,
-                        trip_id=trip_id,
+                        status=OpsItemStatus.PENDING,
                     )
                     .first()
                 )
@@ -146,13 +165,13 @@ def get_agent_tools(db: Session, rider_id: str) -> list[Any]:
                     ops_item = OpsItem(
                         rider_id=rider_id,
                         kind=decision.outcome,
-                        amount=owed_amount,
+                        amount=true_outstanding_balance,
                         reason=decision.reason,
-                        trip_id=trip_id,
+                        trip_id=None,
                     )
                     db.add(ops_item)
                     db.commit()
-                return f"Decision: {decision.outcome}. Item sent to Operations for manual review. Reason: {decision.reason}. Amount: ₹{owed_amount}."
+                return f"Decision: {decision.outcome}. Item sent to Operations for manual review. Reason: {decision.reason}. Amount: ₹{true_outstanding_balance}."
             else:
                 return f"Decision: {decision.outcome}. Reason: {decision.reason}. Amount: ₹{owed_amount}."
 
