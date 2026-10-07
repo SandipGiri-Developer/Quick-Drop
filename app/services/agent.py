@@ -1,7 +1,7 @@
-from typing import Any
 import time
+from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -9,9 +9,9 @@ from langgraph.prebuilt import ToolNode
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db.models import AiHealthState
 from app.services.agent_tools import get_agent_tools
 from app.services.ai_health import AiHealthTracker
-from app.db.models import AiHealthState
 
 
 class AgentState(MessagesState):
@@ -86,7 +86,7 @@ def create_agent_graph(rider_id: str, db: Session) -> Any:
                 tracker.record_event(db, settings.llm_provider, "SUCCESS", "Request successful", 200, True)
                 return {"messages": [response]}
                 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 err_str = str(e).lower()
                 status = 500
                 err_type = "UNKNOWN"

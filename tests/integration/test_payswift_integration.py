@@ -2,6 +2,7 @@ import uuid
 
 import pytest
 
+from app.core.config import settings
 from app.infrastructure.payswift import (
     PaymentResult,
     PayoutStatus,
@@ -11,8 +12,6 @@ from app.infrastructure.payswift import (
     PaySwiftValidationError,
 )
 
-
-from app.core.config import settings
 
 @pytest.fixture
 def client() -> PaySwiftClient:

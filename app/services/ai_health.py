@@ -1,10 +1,13 @@
+import datetime
+import os
 import threading
 import time
-import datetime
-from sqlalchemy.orm import Session
-from app.db.models import AiHealthEvent, AiHealthState
 from typing import Any
-import os
+
+from sqlalchemy.orm import Session
+
+from app.db.models import AiHealthEvent, AiHealthState
+
 
 class AiHealthTracker:
     _instance = None
@@ -37,7 +40,7 @@ class AiHealthTracker:
                 time.sleep(MIN_INTERVAL - elapsed)
             self.last_request_time = time.time()
 
-    def record_event(self, db: Session, provider: str, error_type: str, safe_message: str, status_code: int = None, is_success: bool = False):
+    def record_event(self, db: Session, provider: str, error_type: str, safe_message: str, status_code: int | None = None, is_success: bool = False):
         with self._lock:
             if is_success:
                 if self.state != AiHealthState.HEALTHY:
@@ -52,7 +55,7 @@ class AiHealthTracker:
                 db.add(event)
                 try:
                     db.commit()
-                except:
+                except Exception:  # noqa: BLE001
                     db.rollback()
                 return
 
@@ -86,7 +89,7 @@ class AiHealthTracker:
             db.add(event)
             try:
                 db.commit()
-            except:
+            except Exception:  # noqa: BLE001
                 db.rollback()
 
     def get_health_status(self, db: Session) -> dict[str, Any]:

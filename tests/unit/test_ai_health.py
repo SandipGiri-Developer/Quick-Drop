@@ -1,9 +1,9 @@
-import pytest
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
+
+from app.db.models import AiHealthState
 from app.services.ai_health import AiHealthTracker
-from app.db.models import AiHealthState, AiHealthEvent
-from app.api.ops import get_ai_health
+
 
 def test_ai_health_tracker_singleton():
     t1 = AiHealthTracker.get_instance()
