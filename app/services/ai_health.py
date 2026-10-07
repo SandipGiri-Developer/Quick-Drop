@@ -32,7 +32,9 @@ class AiHealthTracker:
         if os.getenv("TESTING") == "1":
             return  # Don't delay in fast tests
 
-        MIN_INTERVAL = 3.5
+        from app.core.config import settings
+
+        MIN_INTERVAL = float(settings.llm_delay_seconds)
         with self._lock:
             now = time.time()
             elapsed = now - self.last_request_time

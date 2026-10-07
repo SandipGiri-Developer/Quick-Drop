@@ -35,5 +35,8 @@ jobs:
       - name: Type check with mypy
         run: mypy --strict app tests
 
+      - name: Start Services
+        run: docker compose up -d --wait
+
       - name: Test with pytest and coverage
-        run: pytest --cov=app --cov-fail-under=85 tests/
+        run: pytest --cov=app --cov-fail-under=90 tests/

@@ -1,6 +1,6 @@
 import time
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from app.db.models import AiHealthState
 from app.services.ai_health import AiHealthTracker
@@ -98,7 +98,9 @@ def test_get_health_status() -> None:
     assert len(res["recent_events"]) == 1
 
 
-def test_agent_error_handling(monkeypatch: Any) -> None:
+@patch("app.services.agent.ChatGoogleGenerativeAI")
+@patch("app.services.agent.ChatGroq")
+def test_agent_error_handling(mock_groq: Any, mock_gemini: Any, monkeypatch: Any) -> None:
     from app.services.agent import create_agent_graph
 
     db = MagicMock()

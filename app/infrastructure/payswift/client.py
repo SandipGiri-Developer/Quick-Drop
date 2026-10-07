@@ -109,6 +109,11 @@ class PaySwiftClient(PaymentProvider):
             raise PaySwiftTransientError(f"Network error: {e.reason}")
         except TimeoutError:
             raise PaySwiftTimeoutError("Request timed out")
+        except Exception as e:
+            # Catch RemoteDisconnected and ConnectionResetError
+            if "Remote end closed connection" in str(e) or "Connection reset" in str(e):
+                raise PaySwiftTransientError(f"Connection dropped: {e}")
+            raise PaySwiftError(f"Unexpected error: {e}")
 
     def create_payment(self, request: PaySwiftRequest, idempotency_key: str) -> PaySwiftResponse:
         _, data = self._execute_request(
@@ -193,48 +198,60 @@ class PaySwiftClient(PaymentProvider):
                     f"Timeout submitting payment for rider {request.rider_id} (key: {idempotency_key}). "
                     f"Checking ledger..."
                 )
+                uncertain = True
+                last_error = None
+            except PaySwiftRateLimitError as e:
+                logger.warning(
+                    f"Rate limited submitting payment for rider {request.rider_id} (key: {idempotency_key})."
+                )
+                uncertain = False
+                last_error = e
             except PaySwiftTransientError as e:
                 logger.warning(
                     f"Transient error submitting payment for rider {request.rider_id} (key: {idempotency_key}): {e}. "
                     f"Checking ledger to be safe..."
                 )
+                uncertain = True
+                last_error = e
 
-            # We are in an uncertain state. We must check the ledger.
-            # If the ledger check also transiently fails, we should retry the ledger check!
-            try:
-                # We use with_retry just for the ledger check
-                existing = with_retry(
-                    max_attempts=3,
-                    base_delay=1.0,
-                    action=lambda: self.find_payment_by_reference(
-                        request.rider_id, request.reference, request.amount
-                    ),
-                    is_retryable=_is_retryable,
-                )
-                if existing:
-                    logger.info(
-                        f"Payment already processed and found in ledger for rider {request.rider_id}."
+            if uncertain:
+                # We are in an uncertain state. We must check the ledger.
+                # If the ledger check also transiently fails, we should retry the ledger check!
+                try:
+                    # We use with_retry just for the ledger check
+                    existing = with_retry(
+                        max_attempts=3,
+                        base_delay=1.0,
+                        action=lambda: self.find_payment_by_reference(
+                            request.rider_id, request.reference, request.amount
+                        ),
+                        is_retryable=_is_retryable,
                     )
-                    return PaymentResult(
-                        payout_id=existing.payout_id,
-                        status=PayoutStatus(existing.status),
-                        rider_id=existing.rider_id,
-                        amount=existing.amount,
-                        reference=existing.reference,
-                    )
-                else:
-                    logger.info("Payment not found in ledger. Safe to retry.")
-            except Exception as e:  # noqa: BLE001
-                # If we couldn't even check the ledger, we should probably fail instead of blinding retrying,
-                # or just loop and try again later if we still have attempts.
-                logger.error(f"Failed to check ledger during recovery: {e}")
+                    if existing:
+                        logger.info(
+                            f"Payment already processed and found in ledger for rider {request.rider_id}."
+                        )
+                        return PaymentResult(
+                            payout_id=existing.payout_id,
+                            status=PayoutStatus(existing.status),
+                            rider_id=existing.rider_id,
+                            amount=existing.amount,
+                            reference=existing.reference,
+                        )
+                    else:
+                        logger.info("Payment not found in ledger. Safe to retry.")
+                except Exception as e:  # noqa: BLE001
+                    # If we couldn't even check the ledger, we should probably fail instead of blinding retrying,
+                    # or just loop and try again later if we still have attempts.
+                    logger.error(f"Failed to check ledger during recovery: {e}")
 
             if attempts >= max_attempts:
                 raise PaySwiftError("Max retries exceeded while in uncertain state.")
 
-            # Backoff before retrying
             import time
-
-            time.sleep(base_delay * (2 ** (attempts - 1)))
+            delay = getattr(last_error, "retry_after", None)
+            if delay is None:
+                delay = base_delay * (2 ** (attempts - 1))
+            time.sleep(delay)
 
         raise PaySwiftError("Unreachable")

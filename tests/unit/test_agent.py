@@ -169,3 +169,34 @@ def test_agent_tool_execute_resolution_not_owed() -> None:
     # R999 has no trips/discrepancies
     result = exec_tool.invoke({"trip_id": "T000"})
     assert "Trip T000 not found" in result
+
+@patch("app.services.agent.ChatGoogleGenerativeAI")
+def test_agent_llm_rate_limit(mock_chat_class: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "llm_provider", "gemini")
+    mock_instance = MagicMock()
+    mock_chat_class.return_value = mock_instance
+    mock_instance.bind_tools.return_value = mock_instance
+    
+    # 429 should cause it to backoff and eventually fail after retries (max 2 retries in agent?)
+    # Actually, agent uses 3 retries. We will just raise 429 constantly
+    mock_instance.invoke.side_effect = Exception("429 Rate Limit Exceeded")
+    
+    db = MagicMock()
+    # To avoid actual sleeping, mock time.sleep
+    with patch("time.sleep"):
+        response = run_agent("R001", db, [], "hello")
+    assert "technical difficulties" in response
+    
+@patch("app.services.agent.ChatGoogleGenerativeAI")
+def test_agent_llm_auth_error(mock_chat_class: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "llm_provider", "gemini")
+    mock_instance = MagicMock()
+    mock_chat_class.return_value = mock_instance
+    mock_instance.bind_tools.return_value = mock_instance
+    
+    # 401 should break immediately
+    mock_instance.invoke.side_effect = Exception("401 Unauthorized")
+    
+    db = MagicMock()
+    response = run_agent("R001", db, [], "hello")
+    assert "technical difficulties" in response
