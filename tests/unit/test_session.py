@@ -1,6 +1,9 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from app.db.session import get_db
+
 
 def test_get_db():
     mock_session = MagicMock()

@@ -1,5 +1,7 @@
 import pytest
+
 from app.infrastructure.payswift.retry import with_retry
+
 
 def test_retry_success():
     count = 0

@@ -109,7 +109,7 @@ class PaySwiftClient(PaymentProvider):
             raise PaySwiftTransientError(f"Network error: {e.reason}")
         except TimeoutError:
             raise PaySwiftTimeoutError("Request timed out")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             # Catch RemoteDisconnected and ConnectionResetError
             if "Remote end closed connection" in str(e) or "Connection reset" in str(e):
                 raise PaySwiftTransientError(f"Connection dropped: {e}")
