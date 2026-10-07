@@ -178,6 +178,7 @@ class PaySwiftClient(PaymentProvider):
         attempts = 0
         max_attempts = 8
         base_delay = 1.0
+        last_error: PaySwiftTransientError | None = None
 
         while attempts < max_attempts:
             attempts += 1

@@ -2,19 +2,20 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from app.api.main import app, get_db
+from app.api.main import app
+from app.db.session import get_db
 
 client = TestClient(app)
 
 
-def test_health_success():
+def test_health_success() -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "db": "connected"}
 
 
 @patch("app.api.main.get_db")
-def test_health_failure(mock_get_db):
+def test_health_failure(mock_get_db: MagicMock) -> None:
     mock_db = MagicMock()
     mock_db.execute.side_effect = Exception("DB Down")
 
@@ -28,7 +29,7 @@ def test_health_failure(mock_get_db):
 
 
 @patch("app.api.main.process_message")
-def test_handle_message_exception(mock_process):
+def test_handle_message_exception(mock_process: MagicMock) -> None:
     mock_process.side_effect = Exception("Unknown Error")
 
     payload = {

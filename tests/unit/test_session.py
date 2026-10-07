@@ -5,7 +5,7 @@ import pytest
 from app.db.session import get_db
 
 
-def test_get_db():
+def test_get_db() -> None:
     mock_session = MagicMock()
     with patch("app.db.session.SessionLocal", return_value=mock_session):
         gen = get_db()

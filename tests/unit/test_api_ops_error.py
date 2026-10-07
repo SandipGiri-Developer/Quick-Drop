@@ -6,11 +6,11 @@ from app.api.main import app
 
 client = TestClient(app)
 
-from app.api.ops import get_db
+from app.db.session import get_db
 
 
 @patch("app.api.ops.get_db")
-def test_ops_endpoints_exceptions(mock_get_db):
+def test_ops_endpoints_exceptions(mock_get_db: MagicMock) -> None:
     mock_db = MagicMock()
     mock_db.execute.side_effect = Exception("DB Down")
 

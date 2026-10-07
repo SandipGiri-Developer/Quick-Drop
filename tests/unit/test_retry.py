@@ -1,19 +1,21 @@
+from typing import Any
+
 import pytest
 
 from app.infrastructure.payswift.retry import with_retry
 
 
-def test_retry_success():
+def test_retry_success() -> None:
     count = 0
 
-    def action():
+    def action() -> Any:
         nonlocal count
         count += 1
         if count < 3:
             raise ValueError("fail")
         return "success"
 
-    def is_retryable(e):
+    def is_retryable(e: Exception) -> bool:
         return isinstance(e, ValueError)
 
     res = with_retry(
@@ -27,15 +29,15 @@ def test_retry_success():
     assert count == 3
 
 
-def test_retry_max_attempts():
+def test_retry_max_attempts() -> None:
     count = 0
 
-    def action():
+    def action() -> Any:
         nonlocal count
         count += 1
         raise ValueError("fail")
 
-    def is_retryable(e):
+    def is_retryable(e: Exception) -> bool:
         return isinstance(e, ValueError)
 
     with pytest.raises(ValueError):
@@ -49,11 +51,11 @@ def test_retry_max_attempts():
     assert count == 2
 
 
-def test_retry_not_retryable():
-    def action():
+def test_retry_not_retryable() -> None:
+    def action() -> Any:
         raise TypeError("stop")
 
-    def is_retryable(e):
+    def is_retryable(e: Exception) -> bool:
         return isinstance(e, ValueError)
 
     with pytest.raises(TypeError):
@@ -66,25 +68,25 @@ def test_retry_not_retryable():
         )
 
 
-def test_retry_after_property():
+def test_retry_after_property() -> None:
     class CustomError(Exception):
         retry_after = 0.5
 
     count = 0
 
-    def action():
+    def action() -> Any:
         nonlocal count
         count += 1
         if count < 2:
             raise CustomError("wait")
         return "done"
 
-    def is_retryable(e):
+    def is_retryable(e: Exception) -> bool:
         return True
 
-    slept = 0
+    slept: float = 0.0
 
-    def sleep_func(x):
+    def sleep_func(x: float) -> None:
         nonlocal slept
         slept = x
 
