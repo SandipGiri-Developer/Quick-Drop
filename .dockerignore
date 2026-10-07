@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+__pycache__
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+ai-logs
+qd_assignment.egg-info
+.env
+scratch_*
+*.db

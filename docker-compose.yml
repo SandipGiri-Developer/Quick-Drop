@@ -1,6 +1,54 @@
-# Starter file. Add your own services (your app, Postgres) next to payswift. Leave payswift as it is.
 services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: qd_user
+      POSTGRES_PASSWORD: qd_pass
+      POSTGRES_DB: qd_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qd_user -d qd_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   payswift:
-    build: ./payswift
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python payswift/server.pyc
+    environment:
+      - PORT=8081
+      - PROVIDER_CHAOS=on
     ports:
       - "8081:8081"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql+psycopg://qd_user:qd_pass@db:5432/qd_db
+      - PAYSWIFT_BASE_URL=http://payswift:8081
+      - ENVIRONMENT=production
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - LLM_PROVIDER=${LLM_PROVIDER:-google}
+      - LLM_MODEL=${LLM_MODEL:-gemini-1.5-flash}
+      - LLM_DELAY_SECONDS=${LLM_DELAY_SECONDS:-5}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      payswift:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
