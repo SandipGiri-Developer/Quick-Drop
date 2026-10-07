@@ -249,6 +249,7 @@ class PaySwiftClient(PaymentProvider):
                 raise PaySwiftError("Max retries exceeded while in uncertain state.")
 
             import time
+
             delay = getattr(last_error, "retry_after", None)
             if delay is None:
                 delay = base_delay * (2 ** (attempts - 1))

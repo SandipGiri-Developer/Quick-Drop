@@ -145,9 +145,9 @@ from sqlalchemy.exc import SAWarning
 @settings(max_examples=10, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(st.lists(st.sampled_from(["approve", "reject"]), min_size=2, max_size=5))
 def test_concurrent_idempotency_simulation(db_session: Session, actions: list[str]) -> None:
-    # We ignore SAWarning here because Hypothesis reuses the function-scoped db_session 
-    # across multiple iterations. When we DELETE all rows, SQLite resets the auto-increment counter. 
-    # So the next inserted OpsItem gets id=1 again, conflicting with the previous iteration's object 
+    # We ignore SAWarning here because Hypothesis reuses the function-scoped db_session
+    # across multiple iterations. When we DELETE all rows, SQLite resets the auto-increment counter.
+    # So the next inserted OpsItem gets id=1 again, conflicting with the previous iteration's object
     # that is still in the SQLAlchemy identity map. This is harmless test-only artifact.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=SAWarning)

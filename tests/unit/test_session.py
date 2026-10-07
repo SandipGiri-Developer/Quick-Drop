@@ -11,8 +11,8 @@ def test_get_db():
         gen = get_db()
         db = next(gen)
         assert db is mock_session
-        
+
         with pytest.raises(StopIteration):
             next(gen)
-            
+
         mock_session.close.assert_called_once()
