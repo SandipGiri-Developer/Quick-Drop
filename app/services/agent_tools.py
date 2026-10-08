@@ -46,7 +46,7 @@ def get_agent_tools(db: Session, rider_id: str) -> list[Any]:
             try:
                 ledger = payswift.get_ledger(rider_id)
                 total_paid = sum(p.amount for p in ledger.data if p.status.lower() == "processed")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Could not fetch ledger for check_discrepancies: {e}")
                 total_paid = 0
                 
@@ -61,7 +61,7 @@ def get_agent_tools(db: Session, rider_id: str) -> list[Any]:
                     f"- Date: {d.day}, Trip: {d.trip_id or 'N/A'}, Issue: {d.kind.value}, "
                     f"Owed: ₹{d.owed}, Paid: ₹{d.paid}, Claimable: ₹{d.claimable}"
                 )
-            lines.append(f"\n---")
+            lines.append("\n---")
             lines.append(f"Total CSV Discrepancies: ₹{total_csv}")
             lines.append(f"Already Compensated via PaySwift: ₹{total_paid}")
             lines.append(f"True Outstanding Balance: ₹{true_outstanding}")
