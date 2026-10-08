@@ -117,7 +117,7 @@ class AiHealthTracker:
             )
             recent_events = [
                 {
-                    "time": e.occurred_at.strftime("%H:%M:%S"),
+                    "time": e.occurred_at.isoformat() + "Z" if e.occurred_at.tzinfo is None else e.occurred_at.isoformat(),
                     "type": e.error_type,
                     "status": e.status_code,
                     "message": e.safe_message,
@@ -128,7 +128,7 @@ class AiHealthTracker:
                 "provider": os.getenv("LLM_PROVIDER", "google"),
                 "status": self.state.value,
                 "last_error": self.last_error,
-                "last_error_time": self.last_error_time.strftime("%Y-%m-%d %H:%M:%S")
+                "last_error_time": self.last_error_time.isoformat() + "Z" if self.last_error_time and self.last_error_time.tzinfo is None else self.last_error_time.isoformat()
                 if self.last_error_time
                 else None,
                 "recent_events": recent_events,

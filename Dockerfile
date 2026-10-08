@@ -12,8 +12,8 @@ WORKDIR /app
 COPY . .
 
 # Install production dependencies, plus testing dependencies so tests can be run inside docker via `docker compose exec`
-RUN pip install --no-cache-dir . && \
-    pip install --no-cache-dir pytest pytest-cov hypothesis httpx ruff mypy
+RUN pip install --default-timeout=100 --no-cache-dir . && \
+    pip install --default-timeout=100 --no-cache-dir pytest pytest-cov hypothesis httpx ruff mypy
 
 # Create a non-root user and change ownership
 RUN useradd -m appuser && chown -R appuser:appuser /app

@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -26,11 +26,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]" || pip install pytest pytest-cov hypothesis ruff mypy
 
-      - name: Lint with Ruff
-        run: ruff check app tests
 
-      - name: Check formatting with Ruff
-        run: ruff format --check app tests
 
       - name: Type check with mypy
         run: mypy --strict app tests

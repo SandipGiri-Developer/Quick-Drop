@@ -421,7 +421,7 @@
                                 <span style="font-size: 0.8rem; color: var(--text-muted)">Trip: ${item.trip_id || 'N/A'}</span>
                             </div>
                             <div class="reason">${item.reason}</div>
-                            <div style="font-size: 0.75rem; color: var(--text-muted)">Created: ${new Date(item.created_at).toLocaleString()}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted)">Created: ${new Date(item.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div>
                         </div>
                         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 1rem;">
                             <div class="amount">₹${item.amount}</div>
@@ -482,7 +482,7 @@
                 
                 content.innerHTML = data.map(t => `
                     <div class="trace-item">
-                        <div class="trace-time">${new Date(t.created_at).toLocaleString()}</div>
+                        <div class="trace-time">${new Date(t.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div>
                         <div class="trace-type">${t.action_type}</div>
                         <div class="trace-content">${escapeHtml(t.content)}</div>
                     </div>
@@ -586,7 +586,7 @@
                                     border-bottom:1px solid rgba(255,255,255,0.05);
                                 ">
                                     <td style="padding:0.5rem;">
-                                        ${e.time}
+                                        ${new Date(e.time).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour12: false })}
                                     </td>
 
                                     <td style="padding:0.5rem;">
@@ -657,7 +657,7 @@
                                 <strong style="color:var(--text-muted)">
                                     Last Occurred:
                                 </strong>
-                                ${data.last_error_time}
+                                ${new Date(data.last_error_time).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour12: false })}
                             </div>
                         `
                         : ''
