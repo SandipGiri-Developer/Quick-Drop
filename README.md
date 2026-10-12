@@ -1,63 +1,65 @@
 # QuickDrop Rider Payout Dispute Desk
 
-This repository contains the complete solution for the QuickDrop Rider Payout Dispute Desk assignment.
+QuickDrop Rider Payout Dispute Desk is an automated support and dispute resolution system for quick delivery riders. The application handles questions regarding missing surge pay, wrong deductions, incentive shortfalls, and distance discrepancies. It pairs an AI agent for natural conversation with a deterministic backend for all financial calculations and policy enforcement.
 
-## How to Run It
+## Architecture
 
-1. **Start the system**:
-   ```bash
-   docker compose down -v
-   docker compose up --build -d
-   ```
-   This will spin up the FastAPI app, the PostgreSQL database, and the PaySwift sandbox.
+The system maintains a strict division of responsibility between the language model and deterministic backend code.
 
-2. **Access the Ops Dashboard**:
-   Open [http://localhost:8000/ops](http://localhost:8000/ops) in your browser. This dashboard displays pending approvals, escalations, agent traces, and live AI/API health metrics.
+### Model Responsibilities
 
-3. **Run Evaluations**:
-   ```bash
-   # Run unit/integration tests
-   docker compose exec app pytest -v
-   
-   # Run the full 24-case + adversarial evaluator
-   docker compose exec -e PYTHONPATH=/app app python evals/run.py http://localhost:8000
-   ```
+1. Understand rider intent from messages in English, Hindi, and Hinglish.
+2. Extract trip identifiers, dates, and dispute reasons from conversations.
+3. Request clarification when the rider provides incomplete information.
+4. Compose natural, empathetic explanations and updates for riders.
 
-## Agent Design
+The language model never calculates monetary figures, never determines dispute eligibility, and never authorizes disbursements.
 
-The system uses **LangGraph** and **LangChain** with the Gemini provider to orchestrate rider conversations.
+### Deterministic Backend Responsibilities
 
-### What the Model Decides
-The LLM is strictly restricted to conversational understanding. It decides:
-- How to extract intent (e.g., identifying the rider is asking about a missing surge).
-- How to extract parameters (e.g., trip ID or date).
-- When to ask clarification questions vs when to invoke a tool.
-- How to format the final friendly response back to the rider in natural language/Hinglish.
+1. Fare Calculation: Accurately calculates expected earnings, incentives, and deductions using standard bankers rounding.
+2. Policy Rules: Enforces the seven day dispute window, the 200 rupee daily autopay ceiling per rider, and single dispute per day limits.
+3. Ledger Reconciliation: Queries the PaySwift ledger directly to verify existing payouts and avoid duplicate transactions.
+4. Idempotency: Deduplicates incoming webhook messages and guards payout approval actions with database locks.
+5. Rate Limiting: Manages outbound request pacing and retries to maintain reliable external provider communication.
 
-**Crucially, the LLM NEVER decides payout amounts, auto-pay eligibility, or financial rules.**
+## Getting Started
 
-### What the Code Decides
-All financial and business logic is deterministic and handled entirely by the Python backend:
-- **Fare Calculator**: Calculates the exact owed amount using bankers' rounding and computes discrepancies.
-- **Decision Engine**: Enforces the 7-day dispute window, the ₹200 daily auto-pay limit per rider, and once-per-day constraints.
-- **PaySwift Reconciliation**: Verifies past payments directly against the PaySwift ledger to prevent duplicate payouts.
-- **Idempotency**: Message deduplication and idempotent approval locks are enforced at the database level.
-- **Rate Limiting**: An `AiHealthTracker` interceptor ensures strict 3-4 second delays between outbound LLM requests to prevent quota exhaustion, backed by resilient retry logic.
+1. Build the container images:
+```bash
+docker compose build
+```
 
-### Tools Provided to the Agent
-1. `check_discrepancies(trip_id)`: Fetches trip details and calculates any shortfall.
-2. `execute_dispute_resolution(trip_id)`: Triggers the deterministic decision engine to either auto-pay via PaySwift, escalate to Ops, or require Ops approval.
+2. Start the services:
+```bash
+docker compose up
+```
 
-## Assumptions Made
-1. **Rider Identity**: The `rider_id` provided in the API payload is trusted (from the messaging vendor). If a rider claims a different identity in the text (e.g., "I am R005"), the agent ignores it and enforces security using the authenticated ID.
-2. **Date Parsing**: If a rider says "20 tarikh wala", the agent assumes the current month and year based on the `received_at` timestamp.
-3. **PaySwift Sandbox State**: Because the PaySwift sandbox holds state in memory, we assume a clean environment (`docker compose restart payswift`) before running isolated test suites to prevent cross-test state leakage.
+This starts the FastAPI service, the PostgreSQL database, and the PaySwift mock ledger.
 
-## Eval Results
-- **Standard Cases**: 24/24 PASS (100%)
-- **Adversarial Cases**: PASS (Successfully defends against duplicate messages, story changes, and PaySwift outages).
-- **Unit & Integration Tests**: 101/101 PASS (100% passing rate with full coverage of the decision engine).
+3. Open the Operations Dashboard:
+Visit http://localhost:8000/ops in your browser to view pending approvals, recent disputes, live traces, and system health status.
 
-## What Was Skipped
-- We did not introduce heavy frontend frameworks (like React or Vue) for the Ops Dashboard. As requested, we kept the tech stack fixed to vanilla HTML/JS and FastAPI to ensure a lightweight, maintainable, and production-ready solution. 
-- We did not implement a dedicated persistent memory layer across *multiple days* of chat context for the LLM; the agent relies entirely on the immediate trace and session history.
+## Testing and Evaluation
+
+Run the automated test suite inside the application container:
+```bash
+docker compose exec app pytest
+```
+
+Run the end to end evaluation scenarios:
+```bash
+docker compose exec app python evals/run.py http://localhost:8000
+```
+
+## Application Endpoints
+
+POST /messages: Accepts incoming rider chat messages and returns the assistant response.
+
+GET /ops: Web interface for human operators to inspect system status and review cases.
+
+GET /ops/pending: Returns disputes requiring human operator review and manual approval.
+
+GET /trace/{rider_id}: Returns structured execution traces for a given rider session.
+
+GET /health: Readiness probe that returns status 200 when all components are healthy.
